@@ -1,11 +1,15 @@
-Python work time management gTalk (jabber) bot
+Python2.6 work time management gTalk (jabber) bot
 
 
+You must register gmail.com account for your bot, because it uses google-docs service for reports.
 
 Starting
 --------
-
-1. Install all dependenses: .
+1. Install all dependenses:
+		python-sqlalchemy
+		python-reportlab
+		python-xmpp
+		python-gdata
 
 2. Create config.py file (example in the end of readme)
 
