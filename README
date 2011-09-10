@@ -1,0 +1,39 @@
+Python work time management gTalk (jabber) bot
+
+
+
+Starting
+--------
+
+1. Install all dependenses: .
+
+2. Create config.py file (example in the end of readme)
+
+3. Create 'pdf' directory
+
+4. Create gtimebot database
+
+5. Run main.py
+
+6. Add your bot gTalk account to your messager and subscribe it
+
+7. User 'reg Your Name' command to register in gTimebot system
+
+8. Go t the 'gtimebot.tb_company' table, and create your company record (Creating company command will be added soon)
+Go to the 'gtimebot.tb_user' table, set your rate and admin fields (Setting rate command will be added soon)
+
+9. Ask your colleagues to add and subscribe bot in theirs messanger, and to register.
+
+10. Set theirs rate
+
+11. Use 'start', 'stop' commands
+
+
+config.py example:
+-----------------
+# -*- coding: utf-8 -*-
+
+CONF_DB_DSN = u'mysql://dbuser:dbpass@localhost/gtimebot'
+CONF_GMAIL_LOGIN = 'owntimebot@gmail.com'
+CONF_GMAIL_PASS = 'xxxxxxxxxx'
+CONF_APP_CODE = 'iws-timebot-v1'
