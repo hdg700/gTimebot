@@ -153,6 +153,7 @@ class Timebot(object):
         self.handlers[defines.CMD_SUMMARY] = self.onSummary
         self.handlers[defines.CMD_REPORT] = self.onReport
         self.handlers[defines.CMD_CONTINUE] = self.onContinue
+        self.handlers[defines.CMD_HELP] = self.onHelp
 
         self.connection.initHandlers(self.onMessage, self.onPresence)
 
@@ -192,6 +193,11 @@ class Timebot(object):
         if sendmsg: self.connection.send(user.jid, defines.MSG_STOP[1])
 
         return active_session.stop
+
+    def onHelp(self, jid, message):
+        """Help command handler
+        Shows help timp about argument command"""
+        pass
 
     def onReg(self, jid, message):
         """Registration command handler

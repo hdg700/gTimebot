@@ -18,6 +18,7 @@ CMD_TODAY = 3
 CMD_SUMMARY = 4
 CMD_REPORT = 5
 CMD_CONTINUE = 6
+CMD_HELP = 7
 
 # commands
 commands = {
@@ -27,7 +28,8 @@ commands = {
     CMD_TODAY: (u'today', u'сегодня', u'ещвфн', u'ctujlyz'),
     CMD_SUMMARY: (u'summary', u'отчет', u'jnxtn'),
     CMD_REPORT: (u'report', u'отчет', u'jnxtn'),
-    CMD_CONTINUE: (u'продолжить', u'cont', u'continue', u'отменить', u'отмена', u'no'),
+    CMD_CONTINUE: (u'continue', u'продолжить', u'cont', u'отменить', u'отмена', u'no'),
+    CMD_HELP: (u'help', u'хелп'),
 }
 
 # response messages
