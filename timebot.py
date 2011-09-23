@@ -330,6 +330,38 @@ class Timebot(object):
 
         return hours, minutes, salary
 
+    def getUserDaysSalaryFromWorktime(self, user, wtlist):
+        """Calculates sum of worktime for every day in seconds"""
+        wtlist = [(wt.start, (wt.stop - wt.start).seconds) if wt.stop != None
+                else (wt.start, (datetime.now() - wt.start).seconds) for wt in wtlist]
+
+        if not wtlist:
+            raise IndexError()
+
+        def calc(seconds):
+            """Calculates hours, minutes and salary from seconds"""
+            minutes = seconds/60.0
+            salary = int(user.rate/60.0 * minutes)
+
+            hours = int(minutes/60)
+            minutes = int(minutes%60)
+
+            return hours, minutes, salary
+
+        data = []
+        last_start, last_sum = wtlist[0]
+        sec_sum = 0
+        for i in wtlist[1:]:
+            sec_sum += i[1]
+            if i[0].day == last_start.day:
+                last_sum += i[1]
+            else:
+                data.append((last_start, calc(last_sum)))
+                last_start, last_sum = i
+
+        return calc(sec_sum), data
+
+
     def onContinue(self, jid, message):
         """Cancels autostop session"""
         print '--> Continue:', jid, message
@@ -391,33 +423,58 @@ class Timebot(object):
         self.connection.send(user.jid, defines.MSG_REPORT[u'accepted'])
         time_mng = TWorktimeManager()
         company = user.company
-        data = []
-        data.append((u'Имя', u'Время', u'Зарплата'))
+        data_sum = []
+        data_sum.append((u'Имя', u'Время', u'Зарплата'))
+
+        users_data_daily = {}
         for u in company.users:
             if begin and end:
                 reswt = time_mng.getPeriodWorktimeForUser(u, begin, end)
             else:
                 reswt = time_mng.getMonthWorktimeForUser(u)
-            hours, minutes, salary = self.getUserSalaryFromWorktime(u, reswt)
+            #hours, minutes, salary = self.getUserDaysSalaryFromWorktime(u, reswt)
+            try:
+                sum_salary, daily_salary = self.getUserDaysSalaryFromWorktime(u, reswt)
+            except IndexError:
+                continue
+
             row = [u.name,
-                    u'{0} ч {1} мин'.format(hours,
-                            minutes if minutes >= 10 else '0' + str(minutes)).encode('utf-8'),
-                    u'{0} руб'.format(salary)]
-            data.append(row)
+                    u'{0} ч {1} мин'.format(sum_salary[0],
+                            sum_salary[1] if sum_salary[1] >= 10 else '0' + str(sum_salary[1])).encode('utf-8'),
+                    u'{0} руб'.format(sum_salary[2])]
+            data_sum.append(row)
+
+            data_daily = []
+            data_daily.append((u'Дата', u'Время', u'Зарплата'));
+
+            for day in daily_salary:
+                row = [day[0].strftime('%d / %m / %Y'), u'{0} ч {1} мин'.format(day[1][0],
+                        day[1][1]),
+                        u'{0} руб'.format(day[1][2])]
+                data_daily.append(row)
+            users_data_daily[u.name] = data_daily
 
         now = datetime.now()
-        filename = u'pdf/report_{0}.pdf'.format(now.date())
-        filetitle = u'Report ({0} {1})'.format(now.date(), now.time())
-        self.generatePDF(filename, data, begin, end)
-        link = self.uploadReport(filename, filetitle, user)
+        filename_report = u'pdf/report_{0}.pdf'.format(now.date())
+        self.generatePDF(filename_report, data_sum, begin, end)
+        link = self.uploadReport(filename_report, u'Report ({0} {1})'.format(now.date(), now.time()), user)
         if link:
-            self.connection.send(user.jid, defines.MSG_REPORT[True] + u'\n' + link)
+            self.connection.send(user.jid, defines.MSG_REPORT[u'report'] + u'\n' + link)
         else:
             self.connection.send(user.jid, defines.MSG_REPORT[u'request_error'])
 
-    def  generatePDF(self, filename, data, begin=False, end=False):
+        filename_full_report = u'pdf/full_report_{0}.pdf'.format(now.date())
+        self.generatePDF(filename_full_report, users_data_daily, begin, end, full_report=True)
+        link = self.uploadReport(filename_full_report, u'Full report ({0} {1})'.format(now.date(), now.time()), user)
+        if link:
+            self.connection.send(user.jid, defines.MSG_REPORT[u'full_report'] + u'\n' + link)
+        else:
+            self.connection.send(user.jid, defines.MSG_REPORT[u'request_error'])
+
+
+    def  generatePDF(self, filename, data, begin=False, end=False, full_report=False):
         """Generates a pdf-report"""
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
         from reportlab.platypus.tables import Table, TableStyle
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
@@ -434,23 +491,45 @@ class Timebot(object):
         styles = getSampleStyleSheet()
         styles.add(ParagraphStyle(name=u'Rus', fontName=u'Verdana', fontSize=12,
                 leading=35, leftIndent=0, alignment=TA_CENTER, firstLineIndent=0))
-        if begin and end:
-            header = Paragraph(u'Отчет по зарплатам за период с {0} по {1}'.format(begin, end), styles[u'Rus'])
-        else:
-            header = Paragraph(u'Отчет по зарплатам за текущий месяц', styles[u'Rus'])
 
-        tb = Table(data, [250, 130, 130], repeatRows=True)
-        tb.setStyle(TableStyle([(u'FONT', (0, 0), (-1, -1), u'Verdana'),
-                (u'INNERGRID', (0, 0), (-1, -1), 0.20, Color(0.5, 0.5, 0.5)),
-                (u'BACKGROUND', (0, 0), (-1, 0), Color(0.7647, 0.8235, 0.8784)),
-                (u'ROWBACKGROUNDS', (0, 1), (-1, -1), (Color(0.9411, 0.9686, 1.0), Color(1, 1, 1))),
-                (u'BOX', (0, 0), (-1, -1), 0.20, Color(0.1, 0.1, 0.1))]))
+        content = []
+        if begin and end:
+            header_str = u'Отчет по зарплатам за период с {0} по {1}'.format(begin, end)
+        else:
+            header_str = u'Отчет по зарплатам за текущий месяц'
+
+        if not full_report:
+            header = Paragraph(header_str, styles[u'Rus'])
+            content.append(header)
+
+        if full_report:
+            for username, tdata in data.items():
+                tb = Table(tdata, [250, 130, 130], repeatRows=True)
+                tb.setStyle(TableStyle([(u'FONT', (0, 0), (-1, -1), u'Verdana'),
+                        (u'INNERGRID', (0, 0), (-1, -1), 0.20, Color(0.5, 0.5, 0.5)),
+                        (u'BACKGROUND', (0, 0), (-1, 0), Color(0.7647, 0.8235, 0.8784)),
+                        (u'ROWBACKGROUNDS', (0, 1), (-1, -1), (Color(0.9411, 0.9686, 1.0), Color(1, 1, 1))),
+                        (u'BOX', (0, 0), (-1, -1), 0.20, Color(0.1, 0.1, 0.1))]))
+
+                content.append(Paragraph(username, styles[u'Rus']))
+                content.append(tb)
+                content.append(PageBreak())
+
+        else:
+            tb = Table(data, [250, 130, 130], repeatRows=True)
+            tb.setStyle(TableStyle([(u'FONT', (0, 0), (-1, -1), u'Verdana'),
+                    (u'INNERGRID', (0, 0), (-1, -1), 0.20, Color(0.5, 0.5, 0.5)),
+                    (u'BACKGROUND', (0, 0), (-1, 0), Color(0.7647, 0.8235, 0.8784)),
+                    (u'ROWBACKGROUNDS', (0, 1), (-1, -1), (Color(0.9411, 0.9686, 1.0), Color(1, 1, 1))),
+                    (u'BOX', (0, 0), (-1, -1), 0.20, Color(0.1, 0.1, 0.1))]))
+
+            content.append(tb)
 
         def onPage(canvas, doc):
             canvas.setFont(u'Verdana', 8)
-            canvas.drawString(5, 5, u'(C) Generated by Timebot')
+            canvas.drawString(5, 5, u'(C) Generated by gTimebot - ' + header_str)
 
-        doc.build([header, tb], onFirstPage=onPage, onLaterPages=onPage)
+        doc.build(content, onFirstPage=onPage, onLaterPages=onPage)
 
     def uploadReport(self, filename, filetitle, user):
         """Uploads a pdf-report to google-docs service"""
