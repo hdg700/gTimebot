@@ -103,7 +103,7 @@ class TWorktime(Base):
         self.user = user
 
     def __repr__(self):
-        return u'<TWorktime: {0} ({1})>'.format(self.id, self.user.jid)
+        return u'<TWorktime: {0} ({1})>'.format(self.id, self.start)
 
 def defaultBeginTime():
     return datetime.time(10, 0)
@@ -237,16 +237,23 @@ class TWorktimeManager(object):
         except NoResultFound:
             return False
 
-    def getMonthWorktimeForUser(self, user):
+    def getMonthWorktimeForUser(self, user, prevMonth=False):
         """Returns month worktime for speciefed user"""
         try:
-            today = date.today()
-            first_day = today.replace(day=1)
-            last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+            today = datetime.now()
+
+            if prevMonth:
+                today = today - timedelta(days=today.day+1)
+
+            first_day = today.replace(day=1, hour=0, minute=0, second=0)
+            last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1], hour=23, minute=59, second=59)
+
             return self.session.query(TWorktime)\
                     .filter(TWorktime.user == user)\
                     .filter(TWorktime.start >= first_day)\
-                    .filter(TWorktime.start < last_day).all()
+                    .filter(TWorktime.start <= last_day)\
+                    .order_by(asc(TWorktime.start))\
+                    .all()
         except NoResultFound:
             return False
 

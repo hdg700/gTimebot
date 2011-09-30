@@ -350,7 +350,7 @@ class Timebot(object):
 
         data = []
         last_start, last_sum = wtlist[0]
-        sec_sum = 0
+        sec_sum = last_sum
         for i in wtlist[1:]:
             sec_sum += i[1]
             if i[0].day == last_start.day:
@@ -358,6 +358,9 @@ class Timebot(object):
             else:
                 data.append((last_start, calc(last_sum)))
                 last_start, last_sum = i
+
+        if data[-1][0].day != last_start.day:
+            data.append((last_start, calc(last_sum)))
 
         return calc(sec_sum), data
 
@@ -412,7 +415,11 @@ class Timebot(object):
 
     def doReport(self, user, begin=False, end=False):
         """Get summary data for report"""
-        if begin and end:
+        prevMonth = False
+        if begin in ['prev', '-1']:
+            prevMonth = True
+
+        if not prevMonth and begin and end:
             try:
                 datetime.strptime(begin, '%y-%m-%d')
                 datetime.strptime(end, '%y-%m-%d')
@@ -431,7 +438,7 @@ class Timebot(object):
             if begin and end:
                 reswt = time_mng.getPeriodWorktimeForUser(u, begin, end)
             else:
-                reswt = time_mng.getMonthWorktimeForUser(u)
+                reswt = time_mng.getMonthWorktimeForUser(u, prevMonth)
             #hours, minutes, salary = self.getUserDaysSalaryFromWorktime(u, reswt)
             try:
                 sum_salary, daily_salary = self.getUserDaysSalaryFromWorktime(u, reswt)
@@ -496,7 +503,7 @@ class Timebot(object):
         if begin and end:
             header_str = u'Отчет по зарплатам за период с {0} по {1}'.format(begin, end)
         else:
-            header_str = u'Отчет по зарплатам за текущий месяц'
+            header_str = u'Отчет по зарплатам за месяц'
 
         if not full_report:
             header = Paragraph(header_str, styles[u'Rus'])
