@@ -431,7 +431,7 @@ class Timebot(object):
         time_mng = TWorktimeManager()
         company = user.company
         data_sum = []
-        data_sum.append((u'Имя', u'Время', u'Зарплата'))
+        data_sum.append((u'Имя', u'Ставка', u'Время', u'Зарплата'))
 
         users_data_daily = {}
         for u in company.users:
@@ -445,7 +445,7 @@ class Timebot(object):
             except IndexError:
                 continue
 
-            row = [u.name,
+            row = [u.name, u.rate,
                     u'{0} ч {1} мин'.format(sum_salary[0],
                             sum_salary[1] if sum_salary[1] >= 10 else '0' + str(sum_salary[1])).encode('utf-8'),
                     u'{0} руб'.format(sum_salary[2])]
@@ -523,7 +523,7 @@ class Timebot(object):
                 content.append(PageBreak())
 
         else:
-            tb = Table(data, [250, 130, 130], repeatRows=True)
+            tb = Table(data, [250, 60, 130, 130], repeatRows=True)
             tb.setStyle(TableStyle([(u'FONT', (0, 0), (-1, -1), u'Verdana'),
                     (u'INNERGRID', (0, 0), (-1, -1), 0.20, Color(0.5, 0.5, 0.5)),
                     (u'BACKGROUND', (0, 0), (-1, 0), Color(0.7647, 0.8235, 0.8784)),
