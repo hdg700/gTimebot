@@ -348,19 +348,24 @@ class Timebot(object):
 
             return hours, minutes, salary
 
-        data = []
-        last_start, last_sum = wtlist[0]
-        sec_sum = last_sum
-        for i in wtlist[1:]:
-            sec_sum += i[1]
-            if i[0].day == last_start.day:
-                last_sum += i[1]
-            else:
-                data.append((last_start, calc(last_sum)))
-                last_start, last_sum = i
+        try:
+            data = []
+            last_start, last_sum = wtlist[0]
+            sec_sum = last_sum
+            for i in wtlist[1:]:
+                sec_sum += i[1]
+                if i[0].day == last_start.day:
+                    last_sum += i[1]
+                else:
+                    data.append((last_start, calc(last_sum)))
+                    last_start, last_sum = i
 
-        if data[-1][0].day != last_start.day:
-            data.append((last_start, calc(last_sum)))
+            if data[-1][0].day != last_start.day:
+                data.append((last_start, calc(last_sum)))
+        except IndexError:
+            row = (last_start, calc(last_sum))
+            if not row in data:
+                data.append(row)
 
         return calc(sec_sum), data
 
@@ -540,6 +545,8 @@ class Timebot(object):
 
     def uploadReport(self, filename, filetitle, user):
         """Uploads a pdf-report to google-docs service"""
+        import os
+        import atom.data
         import gdata.docs.data
         import gdata.docs.client
 
@@ -549,14 +556,22 @@ class Timebot(object):
             client.ClientLogin(config.CONF_GMAIL_LOGIN,
                     config.CONF_GMAIL_PASS, source=config.CONF_APP_CODE)
 
-            entry = client.Upload(filename, filetitle, content_type=u'application/pdf')
+            f = open(filename)
+            fsize = os.path.getsize(f.name)
+
+            uploader = gdata.client.ResumableUploader(
+                    client, f, 'application/pdf', fsize, chunk_size=10485760, desired_class=gdata.docs.data.DocsEntry)
+
+            entry = gdata.docs.data.DocsEntry(title=atom.data.Title(text=filetitle))
+            entry = uploader.UploadFile('/feeds/upload/create-session/default/private/full', entry=entry)
 
             scope = gdata.acl.data.AclScope(value=user.jid, type=u'user')
             role = gdata.acl.data.AclRole(value=u'reader')
             acl = gdata.docs.data.Acl(scope=scope, role=role)
 
             client.Post(acl, entry.GetAclFeedLink().href)
-        except gdata.client.RequestError:
+        except gdata.client.RequestError as e:
+            print e
             return False
 
         return entry.GetAlternateLink().href
