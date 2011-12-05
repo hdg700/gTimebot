@@ -7,9 +7,17 @@ __email__ = "hdg700@gmail.com"
 
 from models import *
 from datetime import datetime, time
+from abs import ABCMeta, abstractmethod
 import threading
+import defines
 
 class ReportThread(threading.Thread):
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def generatePDF(self, filename, data, begin=False, end=False):
+        pass
+
     def __init__(self, func, *args):
         self.func = func
         self.args = args
