@@ -413,6 +413,17 @@ class Timebot(object):
         args = message.split()
         report.ReportThread(self.doReport, user, *args[:2]).start()
 
+    def getMonthDates(self, prevMonth=False):
+        today = datetime.now()
+
+        if prevMonth:
+            today = today - timedelta(days=today.day+1)
+
+        first_day = today.replace(day=1, hour=0, minute=0, second=0)
+        last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1], hour=23, minute=59, second=59)
+
+        return first_day, last_day
+
     def doReport(self, user, begin=False, end=False):
         """Get summary data for report"""
         prevMonth = False
@@ -460,6 +471,9 @@ class Timebot(object):
                         u'{0} руб'.format(day[1][2])]
                 data_daily.append(row)
             users_data_daily[u.name] = data_daily
+
+        if not begin or not end:
+            begin, end = self.getMonthDates(prevMonth)
 
         now = datetime.now()
         filename_report = u'pdf/report_{0}.pdf'.format(now.date())
