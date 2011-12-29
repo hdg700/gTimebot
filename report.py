@@ -10,13 +10,14 @@ from datetime import datetime, time
 import threading
 
 class ReportThread(threading.Thread):
-    def __init__(self, func, *args):
-        self.func = func
+    def __init__(self, connection, user, *args):
+        self.user = user
+        self.connection = connection
         self.args = args
         threading.Thread.__init__(self)
 
     def run(self):
-        self.func(*self.args)
+        self.doReport(self.user, *self.args)
 
     def getDaysSalaryFromWorktime(self, rate, wtlist):
         """Calculates sum of worktime for every day in seconds"""
@@ -80,7 +81,7 @@ class ReportThread(threading.Thread):
                 reswt = time_mng.getMonthWorktimeForUser(u, prevMonth)
             #hours, minutes, salary = self.getUserDaysSalaryFromWorktime(u, reswt)
             try:
-                sum_salary, daily_salary = self.getUserDaysSalaryFromWorktime(u, reswt)
+                sum_salary, daily_salary = self.getDaysSalaryFromWorktime(u.rate, reswt)
             except IndexError:
                 continue
 
@@ -117,3 +118,122 @@ class ReportThread(threading.Thread):
         else:
             self.connection.send(user.jid, defines.MSG_REPORT[u'request_error'])
 
+#    def uploadReport(self, filename, filetitle, user):
+#        """Uploads a pdf-report to google-docs service"""
+#        import gdata.docs.data
+#        import gdata.docs.client
+#        import syslog
+#
+#        try:
+#            client = gdata.docs.client.DocsClient(source=config.CONF_APP_CODE)
+#            client.ssl = True
+#            client.ClientLogin(config.CONF_GMAIL_LOGIN,
+#                    config.CONF_GMAIL_PASS, source=config.CONF_APP_CODE)
+#
+#            entry = client.Upload(filename, filetitle, content_type=u'application/pdf')
+#
+#            scope = gdata.acl.data.AclScope(value=user.jid, type=u'user')
+#            role = gdata.acl.data.AclRole(value=u'reader')
+#            acl = gdata.docs.data.Acl(scope=scope, role=role)
+#
+#            client.Post(acl, entry.GetAclFeedLink().href)
+#        except gdata.client.RequestError as e:
+#            syslog.syslog(str(e))
+#            return False
+#        except Exception as e:
+#            syslog.syslog(str(e))
+#            return False
+#
+#        return entry.GetAlternateLink().href
+
+    def uploadReport(self, filename, filetitle, user):
+        """Uploads a pdf-report to google-docs service"""
+        import os
+        import atom.data
+        import gdata.docs.data
+        import gdata.docs.client
+
+        try:
+            client = gdata.docs.client.DocsClient(source=config.CONF_APP_CODE)
+            client.ssl = True
+            client.ClientLogin(config.CONF_GMAIL_LOGIN,
+                    config.CONF_GMAIL_PASS, source=config.CONF_APP_CODE)
+
+            f = open(filename)
+            fsize = os.path.getsize(f.name)
+
+            uploader = gdata.client.ResumableUploader(
+                    client, f, 'application/pdf', fsize, chunk_size=10485760, desired_class=gdata.docs.data.DocsEntry)
+
+            entry = gdata.docs.data.DocsEntry(title=atom.data.Title(text=filetitle))
+            entry = uploader.UploadFile('/feeds/upload/create-session/default/private/full', entry=entry)
+
+            scope = gdata.acl.data.AclScope(value=user.jid, type=u'user')
+            role = gdata.acl.data.AclRole(value=u'reader')
+            acl = gdata.docs.data.Acl(scope=scope, role=role)
+
+            client.Post(acl, entry.GetAclFeedLink().href)
+        except gdata.client.RequestError as e:
+            print e
+            return False
+
+        return entry.GetAlternateLink().href
+
+    def  generatePDF(self, filename, data, begin=False, end=False, full_report=False):
+        """Generates a pdf-report"""
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+        from reportlab.platypus.tables import Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+        from reportlab.lib.colors import Color
+
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+
+        pdfmetrics.registerFont(TTFont(u'Verdana', u'./verdana.ttf'))
+        pdfmetrics.registerFont(TTFont(u'VerdanaB', u'./verdana-bold.ttf'))
+
+        doc = SimpleDocTemplate(filename, topMargin=30)
+
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name=u'Rus', fontName=u'Verdana', fontSize=12,
+                leading=35, leftIndent=0, alignment=TA_CENTER, firstLineIndent=0))
+
+        content = []
+        if begin and end:
+            header_str = u'Отчет по зарплатам за период с {0} по {1}'.format(begin, end)
+        else:
+            header_str = u'Отчет по зарплатам за месяц'
+
+        if not full_report:
+            header = Paragraph(header_str, styles[u'Rus'])
+            content.append(header)
+
+        if full_report:
+            for username, tdata in data.items():
+                tb = Table(tdata, [250, 130, 130], repeatRows=True)
+                tb.setStyle(TableStyle([(u'FONT', (0, 0), (-1, -1), u'Verdana'),
+                        (u'INNERGRID', (0, 0), (-1, -1), 0.20, Color(0.5, 0.5, 0.5)),
+                        (u'BACKGROUND', (0, 0), (-1, 0), Color(0.7647, 0.8235, 0.8784)),
+                        (u'ROWBACKGROUNDS', (0, 1), (-1, -1), (Color(0.9411, 0.9686, 1.0), Color(1, 1, 1))),
+                        (u'BOX', (0, 0), (-1, -1), 0.20, Color(0.1, 0.1, 0.1))]))
+
+                content.append(Paragraph(username, styles[u'Rus']))
+                content.append(tb)
+                content.append(PageBreak())
+
+        else:
+            tb = Table(data, [250, 60, 130, 130], repeatRows=True)
+            tb.setStyle(TableStyle([(u'FONT', (0, 0), (-1, -1), u'Verdana'),
+                    (u'INNERGRID', (0, 0), (-1, -1), 0.20, Color(0.5, 0.5, 0.5)),
+                    (u'BACKGROUND', (0, 0), (-1, 0), Color(0.7647, 0.8235, 0.8784)),
+                    (u'ROWBACKGROUNDS', (0, 1), (-1, -1), (Color(0.9411, 0.9686, 1.0), Color(1, 1, 1))),
+                    (u'BOX', (0, 0), (-1, -1), 0.20, Color(0.1, 0.1, 0.1))]))
+
+            content.append(tb)
+
+        def onPage(canvas, doc):
+            canvas.setFont(u'Verdana', 8)
+            canvas.drawString(5, 5, u'(C) Generated by gTimebot - ' + header_str)
+
+        doc.build(content, onFirstPage=onPage, onLaterPages=onPage)

@@ -411,7 +411,7 @@ class Timebot(object):
             return
 
         args = message.split()
-        report.ReportThread(self.doReport, user, *args[:2]).start()
+        report.ReportThread(self.connection, user, *args[:2]).start()
 
     def doReport(self, user, begin=False, end=False):
         """Get summary data for report"""
