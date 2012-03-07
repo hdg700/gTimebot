@@ -16,6 +16,8 @@ class ReportThread(threading.Thread):
         self.args = args
         threading.Thread.__init__(self)
 
+        print args
+
     def run(self):
         self.doReport(self.user, *self.args)
 
@@ -152,6 +154,7 @@ class ReportThread(threading.Thread):
         import atom.data
         import gdata.docs.data
         import gdata.docs.client
+        import gdata.acl.data
 
         try:
             client = gdata.docs.client.DocsClient(source=config.CONF_APP_CODE)
@@ -163,16 +166,21 @@ class ReportThread(threading.Thread):
             fsize = os.path.getsize(f.name)
 
             uploader = gdata.client.ResumableUploader(
-                    client, f, 'application/pdf', fsize, chunk_size=10485760, desired_class=gdata.docs.data.DocsEntry)
+                    client, f, 'application/pdf', fsize, chunk_size=10485760, desired_class=gdata.data.GDEntry)
 
-            entry = gdata.docs.data.DocsEntry(title=atom.data.Title(text=filetitle))
+            entry = gdata.data.GDEntry(title=atom.data.Title(text=filetitle))
             entry = uploader.UploadFile('/feeds/upload/create-session/default/private/full', entry=entry)
 
-            scope = gdata.acl.data.AclScope(value=user.jid, type=u'user')
-            role = gdata.acl.data.AclRole(value=u'reader')
-            acl = gdata.docs.data.Acl(scope=scope, role=role)
+            #scope = gdata.acl.data.AclScope(value=user.jid, type=u'user')
+            #role = gdata.acl.data.AclRole(value=u'reader')
+            #acl = gdata.docs.DocumentListAclEntry(scope=scope, role=role)
 
-            client.Post(acl, entry.GetAclFeedLink().href)
+            #print entry.get_acl_link()
+            #print entry.get_feed_link()
+            #print entry.get_post_link()
+
+            ##client.Post(acl, entry.GetAclFeedLink().href)
+            #client.Post(acl, entry.get_acl_link().href)
         except gdata.client.RequestError as e:
             print e
             return False
