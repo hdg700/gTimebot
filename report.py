@@ -16,10 +16,42 @@ class ReportThread(threading.Thread):
         self.args = args
         threading.Thread.__init__(self)
 
-        print args
-
     def run(self):
-        self.doReport(self.user, *self.args)
+        begin = end = False
+        if len(self.args) >= 2:
+            try:
+                begin = datetime.strptime(self.args[0], '%y-%m-%d')
+                end = datetime.strptime(self.args[1], '%y-%m-%d').replace(hour=23, minute=59, second=59)
+            except ValueError:
+                self.connection.send(self.user.jid, defines.MSG_REPORT[u'dateformat_error'])
+                return False
+
+        elif len(self.args) >= 1:
+            if self.args[0] in ['last', 'prev', '-1']:
+                begin, end = self.getPrevMonthDates()
+            else:
+                self.connection.send(self.user.jid, defines.MSG_REPORT[u'unknown_arg'])
+        else:
+            begin, end = self.getCurrentMonthDates()
+
+        self.doReport(self.user, begin, end)
+
+    def getCurrentMonthDates(self):
+        """Returns a tuple of first and last dates
+        of current month (first_date, last_date)"""
+        today = datetime.now()
+        first_day = today.replace(day=1, hour=0, minute=0, second=0)
+        last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1], hour=23, minute=59, second=59)
+        return first_day, last_day
+
+    def getPrevMonthDates(self):
+        """Returns a tuple of first and last dates
+        of previous month (first_date, last_date)"""
+        today = datetime.now()
+        today = today - timedelta(days=today.day+1)
+        first_day = today.replace(day=1, hour=0, minute=0, second=0)
+        last_day = today.replace(day=calendar.monthrange(today.year, today.month)[1], hour=23, minute=59, second=59)
+        return first_day, last_day
 
     def getDaysSalaryFromWorktime(self, rate, wtlist):
         """Calculates sum of worktime for every day in seconds"""
@@ -57,18 +89,6 @@ class ReportThread(threading.Thread):
 
     def doReport(self, user, begin=False, end=False):
         """Get summary data for report"""
-        prevMonth = False
-        if begin in ['last', 'prev', '-1']:
-            prevMonth = True
-
-        if not prevMonth and begin and end:
-            try:
-                datetime.strptime(begin, '%y-%m-%d')
-                datetime.strptime(end, '%y-%m-%d')
-            except ValueError:
-                self.connection.send(user.jid, defines.MSG_REPORT[u'dateformat_error'])
-                return
-
         self.connection.send(user.jid, defines.MSG_REPORT[u'accepted'])
         time_mng = TWorktimeManager()
         company = user.company
@@ -79,9 +99,6 @@ class ReportThread(threading.Thread):
         for u in company.users:
             if begin and end:
                 reswt = time_mng.getPeriodWorktimeForUser(u, begin, end)
-            else:
-                reswt = time_mng.getMonthWorktimeForUser(u, prevMonth)
-            #hours, minutes, salary = self.getUserDaysSalaryFromWorktime(u, reswt)
             try:
                 sum_salary, daily_salary = self.getDaysSalaryFromWorktime(u.rate, reswt)
             except IndexError:
@@ -95,7 +112,6 @@ class ReportThread(threading.Thread):
 
             data_daily = []
             data_daily.append((u'Дата', u'Время', u'Зарплата'));
-
             for day in daily_salary:
                 row = [day[0].strftime('%d / %m / %Y'), u'{0} ч {1} мин'.format(day[1][0],
                         day[1][1]),
@@ -119,34 +135,6 @@ class ReportThread(threading.Thread):
             self.connection.send(user.jid, defines.MSG_REPORT[u'full_report'] + u'\n' + link)
         else:
             self.connection.send(user.jid, defines.MSG_REPORT[u'request_error'])
-
-#    def uploadReport(self, filename, filetitle, user):
-#        """Uploads a pdf-report to google-docs service"""
-#        import gdata.docs.data
-#        import gdata.docs.client
-#        import syslog
-#
-#        try:
-#            client = gdata.docs.client.DocsClient(source=config.CONF_APP_CODE)
-#            client.ssl = True
-#            client.ClientLogin(config.CONF_GMAIL_LOGIN,
-#                    config.CONF_GMAIL_PASS, source=config.CONF_APP_CODE)
-#
-#            entry = client.Upload(filename, filetitle, content_type=u'application/pdf')
-#
-#            scope = gdata.acl.data.AclScope(value=user.jid, type=u'user')
-#            role = gdata.acl.data.AclRole(value=u'reader')
-#            acl = gdata.docs.data.Acl(scope=scope, role=role)
-#
-#            client.Post(acl, entry.GetAclFeedLink().href)
-#        except gdata.client.RequestError as e:
-#            syslog.syslog(str(e))
-#            return False
-#        except Exception as e:
-#            syslog.syslog(str(e))
-#            return False
-#
-#        return entry.GetAlternateLink().href
 
     def uploadReport(self, filename, filetitle, user):
         """Uploads a pdf-report to google-docs service"""
@@ -209,9 +197,9 @@ class ReportThread(threading.Thread):
 
         content = []
         if begin and end:
-            header_str = u'Отчет по зарплатам за период с {0} по {1}'.format(begin, end)
-        else:
-            header_str = u'Отчет по зарплатам за месяц'
+            header_str = u'Отчет по зарплатам за период с {0} по {1}'\
+                    .format(begin.strftime('%y-%m-%d'),
+                    end.strftime('%y-%m-%d'))
 
         if not full_report:
             header = Paragraph(header_str, styles[u'Rus'])

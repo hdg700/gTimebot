@@ -11,6 +11,7 @@ import xmpp
 import sys
 from models import *
 from datetime import datetime, time
+from sqlalchemy.orm.exc import *
 
 class Connection(object):
     """Connection class used to communicate with server"""
@@ -180,7 +181,11 @@ class Timebot(object):
     def stopUser(self, user, sendmsg=True, autostop=False):
         """Stops user's active session"""
         time_mng = TWorktimeManager()
-        active_session = time_mng.getActiveSessionForUser(user)
+        try:
+            active_session = time_mng.getActiveSessionForUser(user)
+        except MultipleResultsFound:
+            self.connection.send(user.jid, defines.MSG_START[u'multiplesession'])
+            return False
         if not active_session:
             if sendmsg: self.connection.send(user.jid, defines.MSG_STOP[u'notstarted'])
             return False
@@ -224,7 +229,11 @@ class Timebot(object):
             return
 
         time_mng = TWorktimeManager()
-        active_session = time_mng.getActiveSessionForUser(user)
+        try:
+            active_session = time_mng.getActiveSessionForUser(user)
+        except MultipleResultsFound:
+            self.connection.send(jid, defines.MSG_START[u'multiplesession'])
+            return False
         if active_session:
             self.connection.send(jid, defines.MSG_START[u'alreadystarted'])
             return
@@ -374,7 +383,13 @@ class Timebot(object):
             return
 
         time_mng = TWorktimeManager()
-        last_session = time_mng.getLastSessionForUser(user)
+        try:
+            last_session = time_mng.getLastSessionForUser(user)
+        except MultipleResultsFound:
+            self.connection.send(jid, defines.MSG_CONTINUE[u'multiplesession'])
+            return False
+
+
         if not last_session:
             self.connection.send(jid, defines.MSG_CONTINUE[u'notodaysession'])
             return
